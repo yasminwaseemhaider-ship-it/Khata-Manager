@@ -49,13 +49,51 @@ Open the **SQL Editor** in Supabase, paste the whole of
 [`supabase/schema.sql`](supabase/schema.sql), and run it.
 
 It is idempotent, so it is safe to re-run after pulling changes. It creates
-every table, index, policy, trigger and the private `receipts` storage bucket.
+every table, index, policy and trigger. (Receipt images live in Cloudinary,
+not in Supabase Storage, so no bucket is created.)
 
 > **Do not skip this.** Without it you will see
 > `Could not find the table 'public.subcategories'` or
 > `permission denied for table categories`.
 
-### 5. Run
+### 5. Configure email delivery — **required before deploying**
+
+Supabase, not this app, sends the verification and password-reset emails. Its
+built-in sender is throttled to a handful of messages an hour and is explicitly
+not meant for production, so point it at a real mailbox.
+
+**Supabase Dashboard → Project Settings → Authentication → SMTP Settings →
+Enable Custom SMTP:**
+
+| Field | Value for Gmail |
+| --- | --- |
+| Host | `smtp.gmail.com` |
+| Port | `465` |
+| Username | your full Gmail address |
+| Password | a Google **App Password**, entered with no spaces |
+| Sender email | the same Gmail address |
+| Sender name | e.g. `Khata Manager` |
+
+An App Password is not your Google account password. Generate one at
+<https://myaccount.google.com/apppasswords>; it requires 2-Step Verification to
+be switched on. Google displays it in four blocks of four purely for
+readability — type it as sixteen unbroken characters.
+
+The credential is stored by Supabase. It does **not** belong in `.env.local`,
+in Vercel, or anywhere in this repository.
+
+While you are on that screen, set the auth URLs too, under
+**Authentication → URL Configuration**:
+
+- **Site URL** — your deployed origin, e.g. `https://your-app.vercel.app`
+- **Redirect URLs** — add `https://your-app.vercel.app/**` and
+  `http://localhost:3000/**`
+
+Supabase falls back to Site URL whenever the redirect the app asks for is not
+on that allow-list, which is the usual reason a deployed app still emails
+`localhost` links.
+
+### 6. Run
 
 ```bash
 npm run dev
