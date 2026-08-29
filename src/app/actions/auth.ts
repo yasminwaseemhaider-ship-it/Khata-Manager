@@ -110,9 +110,18 @@ export async function signup(formData: FormData) {
 
   const service = createServiceClient();
   if (!service || !mailerConfigured()) {
-    console.error("[signup] service key or mailbox not configured");
+    const missing = [
+      !service && "SUPABASE_SERVICE_ROLE_KEY",
+      !mailerConfigured() && "GMAIL_USER / GMAIL_APP_PASSWORD",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    console.error(`[signup] not configured: ${missing}`);
     return {
-      error: "Sign-up is unavailable right now. Please try again shortly.",
+      error:
+        process.env.NODE_ENV === "production"
+          ? "Sign-up is unavailable right now. Please try again shortly."
+          : `Sign-up is not configured: ${missing} missing. (dev detail)`,
     };
   }
 
@@ -135,7 +144,14 @@ export async function signup(formData: FormData) {
       return { error: "An account with that email already exists. Try signing in." };
     }
     console.error("[signup]", linkError.message);
-    return { error: "Could not create the account. Please try again." };
+    // Collapsing every failure into one generic string is what made the
+    // onboarding GRANT bug so hard to find. Keep the real message in dev.
+    return {
+      error:
+        process.env.NODE_ENV === "production"
+          ? "Could not create the account. Please try again."
+          : `${linkError.message} (dev detail)`,
+    };
   }
 
   const uid = linkData.user?.id;
