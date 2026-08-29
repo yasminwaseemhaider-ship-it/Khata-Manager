@@ -10,7 +10,7 @@ Stack: Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Supab
 ## Phase 1 — Database & security foundation ✅
 
 - [x] Full schema rewrite (`supabase/schema.sql`), idempotent and re-runnable
-- [x] All 22 tables incl. the ones the spec named: `subcategories`, `khata_people`,
+- [x] All 23 tables incl. the ones the spec named: `subcategories`, `khata_people`,
       `shopping_lists`, `notifications`, `receipts`, `transaction_tags`
 - [x] New columns: `transactions.qty / unit_price / subcategory_id / updated_at`,
       `shopping_items.priority`, `khata_entries.due_date / entry_date`,
@@ -34,6 +34,10 @@ Stack: Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Supab
 - [x] Dropped `force row level security`: it also applies RLS to the table
       owner, which is the role the SECURITY DEFINER triggers run as.
 - [x] **Schema applied** to the live project and verified end-to-end.
+- [x] `public.users` — a read-only mirror of `auth.users`, kept current by a
+      trigger, so accounts are visible in the public schema next to everything
+      else. Verified: creating an auth user mirrors the row, deleting the auth
+      user cascades it away.
 
 > Verified against the real database with a temporary user: sign-in →
 > onboarding writes → transaction insert → transaction UPDATE (the old trigger

@@ -16,6 +16,75 @@
 create extension if not exists "uuid-ossp";
 
 -- ============================================================================
+-- 0) USERS — a mirror of auth.users inside the public schema.
+--
+-- The real account lives in auth.users, which the Table Editor hides by
+-- default and which the app is not allowed to write to. This table is a
+-- read-only shadow of it, kept current by a trigger, so account rows are
+-- visible and joinable alongside everything else.
+--
+-- It is NOT the place for preferences — those belong in user_settings. Treat
+-- every column here as owned by Supabase Auth: the trigger overwrites them.
+-- ============================================================================
+create table if not exists public.users (
+  id                uuid primary key references auth.users(id) on delete cascade,
+  email             text,
+  name              text,
+  email_confirmed   boolean not null default false,
+  last_sign_in_at   timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+create index if not exists idx_users_email on public.users (lower(email));
+
+comment on table public.users is
+  'Read-only mirror of auth.users, maintained by trigger. Preferences live in user_settings.';
+
+-- Copies the account into public.users on sign-up, and keeps it current when
+-- the email is confirmed, the address changes, or the user signs in.
+-- SECURITY DEFINER because the trigger fires as the auth service's own role,
+-- which has no rights on the public schema.
+create or replace function public.sync_auth_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.users (id, email, name, email_confirmed, last_sign_in_at, updated_at)
+  values (
+    new.id,
+    new.email,
+    nullif(trim(coalesce(new.raw_user_meta_data ->> 'name',
+                         new.raw_user_meta_data ->> 'full_name', '')), ''),
+    new.email_confirmed_at is not null,
+    new.last_sign_in_at,
+    now()
+  )
+  on conflict (id) do update set
+    email           = excluded.email,
+    -- Keep a name the user has since edited; only fill a blank one.
+    name            = coalesce(public.users.name, excluded.name),
+    email_confirmed = excluded.email_confirmed,
+    last_sign_in_at = excluded.last_sign_in_at,
+    updated_at      = now();
+  return new;
+end $$;
+
+drop trigger if exists trg_sync_auth_user on auth.users;
+create trigger trg_sync_auth_user
+after insert or update of email, email_confirmed_at, last_sign_in_at, raw_user_meta_data
+on auth.users
+for each row execute function public.sync_auth_user();
+
+-- Backfill anyone who signed up before this table existed.
+insert into public.users (id, email, name, email_confirmed, last_sign_in_at)
+select u.id,
+       u.email,
+       nullif(trim(coalesce(u.raw_user_meta_data ->> 'name',
+                            u.raw_user_meta_data ->> 'full_name', '')), ''),
+       u.email_confirmed_at is not null,
+       u.last_sign_in_at
+from auth.users u
+on conflict (id) do nothing;
+
+-- ============================================================================
 -- 1) USER SETTINGS
 -- ============================================================================
 create table if not exists public.user_settings (
@@ -491,6 +560,17 @@ begin
                     with check (user_id = (select auth.uid()))', t, t);
   end loop;
 end $$;
+
+-- public.users keys on `id`, not `user_id`, so it needs its own policy.
+-- Select-only: every column is owned by Supabase Auth and rewritten by the
+-- trigger, so granting write access would only invite drift.
+alter table public.users enable row level security;
+drop policy if exists "owner_select_users" on public.users;
+create policy "owner_select_users" on public.users
+  for select to authenticated
+  using (id = (select auth.uid()));
+
+revoke insert, update, delete on public.users from authenticated;
 
 -- ============================================================================
 -- STORAGE
