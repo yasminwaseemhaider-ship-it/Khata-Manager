@@ -16,7 +16,9 @@ function LoginForm() {
   const redirect = search.get("redirect") || "/dashboard";
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A failed email link (expired, already used, missing code) redirects here
+  // with the reason attached, so seed the banner from it on first render.
+  const [error, setError] = useState<string | null>(() => search.get("error"));
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

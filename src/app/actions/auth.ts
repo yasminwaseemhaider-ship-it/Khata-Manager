@@ -65,6 +65,36 @@ const DEFAULT_ACCOUNTS = [
   { name: "Bank", type: "bank", is_default: false },
 ];
 
+/**
+ * Absolute base URL for the links Supabase emails out (verify, password reset).
+ *
+ * Server-only: both call sites live in this "use server" file, so this must NOT
+ * carry the NEXT_PUBLIC_ prefix — that prefix inlines the value into the client
+ * bundle, and Vercel now refuses to store such a variable privately.
+ *
+ * A localhost value is ignored whenever we are actually running on Vercel. That
+ * combination is never intentional: it happens when .env.local gets copied into
+ * the Vercel dashboard wholesale, and the symptom is verification emails whose
+ * link points at the developer's own machine. VERCEL_PROJECT_PRODUCTION_URL is
+ * injected by Vercel and is the stable production host, so it is the right
+ * fallback even from a preview deployment.
+ */
+const LOCAL_HOST = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+function siteUrl(): string {
+  const onVercel = Boolean(process.env.VERCEL);
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
+  const explicit = (process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "")
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (explicit && !(onVercel && LOCAL_HOST.test(explicit))) return explicit;
+
+  if (vercelHost) return `https://${vercelHost.replace(/\/+$/, "")}`;
+  return "http://localhost:3000";
+}
+
 export async function signup(formData: FormData) {
   const supabase = await createClient();
 
@@ -83,7 +113,7 @@ export async function signup(formData: FormData) {
     password: parsed.data.password,
     options: {
       data: { name: parsed.data.name },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/login`,
+      emailRedirectTo: `${siteUrl()}/auth/callback?next=/dashboard`,
     },
   });
 
@@ -161,7 +191,7 @@ export async function sendPasswordReset(formData: FormData) {
     return { error: "Enter a valid email address." };
   }
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/reset-password`,
+    redirectTo: `${siteUrl()}/auth/callback?next=/reset-password`,
   });
   // Always report success: revealing which emails exist would leak accounts.
   if (error) console.error("[reset]", error.message);

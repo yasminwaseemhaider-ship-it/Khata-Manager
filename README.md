@@ -30,9 +30,12 @@ Copy `.env.example` to `.env.local` and fill it in:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-or-publishable-key
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 # Server-only. Never prefix with NEXT_PUBLIC_.
+# Base URL for the links Supabase emails out (verify, password reset).
+# On Vercel this is optional: VERCEL_PROJECT_PRODUCTION_URL is injected for you.
+SITE_URL=http://localhost:3000
+
 # Optional: used for seeding at sign-up and for permanent account deletion.
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 

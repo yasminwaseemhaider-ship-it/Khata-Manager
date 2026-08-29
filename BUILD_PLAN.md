@@ -212,7 +212,7 @@ generically in production, but show the real message in development.
    creates the new tables (`subcategories`, `khata_people`, `shopping_lists`,
    `notifications`) and fixes the balance trigger.
 2. Set `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, and optionally
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SITE_URL` (server-only), and optionally
    `SUPABASE_SERVICE_ROLE_KEY` (only needed for sign-up seeding and account
    deletion — onboarding seeds without it).
 3. `npm run dev`
