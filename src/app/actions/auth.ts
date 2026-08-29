@@ -6,6 +6,8 @@ import type { DbClient } from "@/types/supabase";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sendMail, mailerConfigured } from "@/lib/server/mailer";
+import { confirmSignupEmail, resetPasswordEmail } from "@/lib/server/emails";
 import { requireUser } from "@/lib/server/session";
 import { run, ActionError } from "@/lib/server/guards";
 import type { ActionResult } from "@/types";
@@ -96,8 +98,6 @@ function siteUrl(): string {
 }
 
 export async function signup(formData: FormData) {
-  const supabase = await createClient();
-
   const parsed = signupSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -108,36 +108,60 @@ export async function signup(formData: FormData) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
+  const service = createServiceClient();
+  if (!service || !mailerConfigured()) {
+    console.error("[signup] service key or mailbox not configured");
+    return {
+      error: "Sign-up is unavailable right now. Please try again shortly.",
+    };
+  }
+
+  // generateLink CREATES the user and returns the confirmation link WITHOUT
+  // sending anything, which is the whole point: the message is delivered by our
+  // own mailbox in the next step rather than by Supabase.
+  const { data: linkData, error: linkError } = await service.auth.admin.generateLink({
+    type: "signup",
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: { name: parsed.data.name },
-      emailRedirectTo: `${siteUrl()}/auth/callback?next=/dashboard`,
+      redirectTo: `${siteUrl()}/auth/callback?next=/dashboard`,
     },
   });
 
-  if (signUpError) {
-    if (signUpError.message.toLowerCase().includes("already registered")) {
+  if (linkError) {
+    const message = linkError.message.toLowerCase();
+    if (message.includes("already been registered") || message.includes("already registered")) {
       return { error: "An account with that email already exists. Try signing in." };
     }
-    return { error: signUpError.message };
+    console.error("[signup]", linkError.message);
+    return { error: "Could not create the account. Please try again." };
   }
 
-  const uid = signUpData.user?.id;
-  if (uid) {
-    const service = createServiceClient();
-    if (service) {
-      await seedUserDefaults(service, uid, parsed.data.name);
-    } else {
-      // Without the service key the trigger-free seed cannot run before the
-      // session exists; onboarding will offer to create the defaults instead.
-      console.warn("[signup] service key missing — defaults not seeded for", uid);
-    }
+  const uid = linkData.user?.id;
+  const actionLink = linkData.properties?.action_link;
+
+  if (!uid || !actionLink) {
+    console.error("[signup] generateLink returned no user or link");
+    return { error: "Could not create the account. Please try again." };
   }
+
+  const sent = await sendMail(
+    confirmSignupEmail(parsed.data.email, actionLink, parsed.data.name)
+  );
+
+  if (!sent.ok) {
+    // The account exists but is unconfirmed and unreachable. Remove it so the
+    // address is free to try again, rather than stranding the user on an
+    // account they can never confirm.
+    await service.auth.admin.deleteUser(uid).catch(() => {});
+    return { error: sent.error ?? "Could not send the confirmation email." };
+  }
+
+  await seedUserDefaults(service, uid, parsed.data.name);
 
   revalidatePath("/", "layout");
-  redirect("/onboarding");
+  return { success: true, email: parsed.data.email };
 }
 
 export async function login(formData: FormData) {
@@ -185,16 +209,32 @@ export async function logout() {
 }
 
 export async function sendPasswordReset(formData: FormData) {
-  const supabase = await createClient();
   const email = String(formData.get("email") ?? "");
   if (!z.string().email().safeParse(email).success) {
     return { error: "Enter a valid email address." };
   }
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl()}/auth/callback?next=/reset-password`,
-  });
-  // Always report success: revealing which emails exist would leak accounts.
-  if (error) console.error("[reset]", error.message);
+  const service = createServiceClient();
+  if (service && mailerConfigured()) {
+    const { data, error } = await service.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: `${siteUrl()}/auth/callback?next=/reset-password` },
+    });
+
+    const actionLink = data?.properties?.action_link;
+    if (error) {
+      // Usually "user not found" — logged, never reported back.
+      console.error("[reset]", error.message);
+    } else if (actionLink) {
+      const sent = await sendMail(resetPasswordEmail(email, actionLink));
+      if (!sent.ok) console.error("[reset] send failed:", sent.error);
+    }
+  } else {
+    console.error("[reset] service key or mailbox not configured");
+  }
+
+  // Always report success, whatever happened above: confirming which addresses
+  // have accounts would let anyone enumerate the user list.
   return { success: true };
 }
 

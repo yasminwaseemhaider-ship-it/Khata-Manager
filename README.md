@@ -56,42 +56,38 @@ not in Supabase Storage, so no bucket is created.)
 > `Could not find the table 'public.subcategories'` or
 > `permission denied for table categories`.
 
-### 5. Configure email delivery — **required before deploying**
+### 5. Configure email delivery — **required**
 
-Supabase, not this app, sends the verification and password-reset emails. Its
-built-in sender is throttled to a handful of messages an hour and is explicitly
-not meant for production, so point it at a real mailbox.
+Sign-up and password reset are unavailable until this is set, because the app
+sends those emails itself. It asks Supabase to *generate* the confirmation link
+and then delivers it through your own mailbox, so Supabase's built-in mailer —
+throttled to a few messages an hour and not meant for production — is never
+used, and its SMTP settings can be left alone.
 
-**Supabase Dashboard → Project Settings → Authentication → SMTP Settings →
-Enable Custom SMTP:**
+```bash
+GMAIL_USER=you@gmail.com
+GMAIL_APP_PASSWORD=sixteencharacters
+MAIL_FROM_NAME=Khata
+```
 
-| Field | Value for Gmail |
-| --- | --- |
-| Host | `smtp.gmail.com` |
-| Port | `465` |
-| Username | your full Gmail address |
-| Password | a Google **App Password**, entered with no spaces |
-| Sender email | the same Gmail address |
-| Sender name | e.g. `Khata Manager` |
+`GMAIL_APP_PASSWORD` is a Google **App Password**, not your account password.
+Create one at <https://myaccount.google.com/apppasswords>; it requires 2-Step
+Verification to be on. Google prints it as four blocks of four for readability
+and the spaces are cosmetic — they are stripped, so either form works.
 
-An App Password is not your Google account password. Generate one at
-<https://myaccount.google.com/apppasswords>; it requires 2-Step Verification to
-be switched on. Google displays it in four blocks of four purely for
-readability — type it as sixteen unbroken characters.
+Gmail rewrites the `From` header to `GMAIL_USER` whatever the app sends, so
+`MAIL_FROM_NAME` controls only the display name. A free account allows roughly
+500 recipients a day.
 
-The credential is stored by Supabase. It does **not** belong in `.env.local`,
-in Vercel, or anywhere in this repository.
-
-While you are on that screen, set the auth URLs too, under
-**Authentication → URL Configuration**:
+Still set the auth URLs, under **Authentication → URL Configuration** in
+Supabase — they decide what the link inside the email points at:
 
 - **Site URL** — your deployed origin, e.g. `https://your-app.vercel.app`
 - **Redirect URLs** — add `https://your-app.vercel.app/**` and
   `http://localhost:3000/**`
 
-Supabase falls back to Site URL whenever the redirect the app asks for is not
-on that allow-list, which is the usual reason a deployed app still emails
-`localhost` links.
+Supabase refuses a redirect target that is not on that allow-list, which is the
+usual reason a deployed app still emails `localhost` links.
 
 ### 6. Run
 

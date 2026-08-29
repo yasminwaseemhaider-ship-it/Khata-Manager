@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/form";
 import { signup } from "@/app/actions/auth";
 import { useToast } from "@/context/ToastContext";
-import { Wallet } from "lucide-react";
+import { Wallet, MailCheck } from "lucide-react";
 
 export default function SignupPage() {
   const { toast } = useToast();
@@ -14,6 +14,10 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
+  // Sign-up no longer lands the user straight in the app: the account exists
+  // but stays unconfirmed until they open the emailed link, so the page has to
+  // say so rather than silently doing nothing.
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,16 +29,44 @@ export default function SignupPage() {
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     const res = await signup(formData);
+    setLoading(false);
     if (res && "error" in res && res.error) {
       setError(res.error);
       toast(res.error, { type: "error" });
-      setLoading(false);
+      return;
+    }
+    if (res && "email" in res && res.email) {
+      setSentTo(res.email);
     }
   }
 
   return (
     <div className="flex min-h-[100dvh] w-full items-center justify-center bg-gradient-to-b from-emerald-50 via-white to-white px-4 py-10">
       <div className="w-full max-w-sm">
+        {sentTo ? (
+          <div className="text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
+              <MailCheck className="h-7 w-7" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">Check your inbox</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              We sent a confirmation link to{" "}
+              <strong className="text-slate-900">{sentTo}</strong>. Open it and your
+              khata is ready. The link expires in 24 hours.
+            </p>
+            <p className="mt-4 text-xs text-slate-400">
+              Nothing yet? Check the spam folder — the first message from a new sender
+              often lands there.
+            </p>
+            <Link
+              href="/login"
+              className="mt-6 inline-block text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              Back to sign in
+            </Link>
+          </div>
+        ) : (
+        <>
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
             <Wallet className="h-7 w-7" />
@@ -114,6 +146,8 @@ export default function SignupPage() {
             Sign in
           </Link>
         </p>
+        </>
+        )}
       </div>
     </div>
   );
