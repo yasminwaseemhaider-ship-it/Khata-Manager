@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Design tokens.
+
+   Light is the base. Dark is applied two ways so all three theme modes work:
+     - `[data-theme="dark"]`         -> the user explicitly chose dark
+     - `prefers-color-scheme: dark`  -> "system", guarded so an explicit
+                                        light choice always wins
+   The root element is stamped server-side from a cookie, so the first paint is
+   already correct (no flash of the wrong theme).
+   ========================================================================= */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  --brand: #059669;
+  --brand-hover: #047857;
+  --brand-soft: #ecfdf5;
+  --brand-text: #047857;
+
+  --expense: #e11d48;
+  --expense-soft: #fff1f2;
+  --income: #059669;
+  --income-soft: #ecfdf5;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+
+  --ring: rgba(5, 150, 105, 0.35);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120;
+    --surface: #131c2e;
+    --surface-2: #1a2438;
+    --border: #26324a;
+    --border-strong: #35415c;
+
+    --text: #e8edf5;
+    --text-muted: #94a3b8;
+    --text-faint: #64748b;
+
+    --brand: #10b981;
+    --brand-hover: #34d399;
+    --brand-soft: #062e24;
+    --brand-text: #6ee7b7;
+
+    --expense: #fb7185;
+    --expense-soft: #3b1220;
+    --income: #34d399;
+    --income-soft: #06291f;
+    --warning: #fbbf24;
+    --warning-soft: #3a2a08;
+    --danger: #f87171;
+    --danger-soft: #3b1414;
+    --info: #60a5fa;
+    --info-soft: #10243f;
+
+    --ring: rgba(16, 185, 129, 0.4);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b1120;
+  --surface: #131c2e;
+  --surface-2: #1a2438;
+  --border: #26324a;
+  --border-strong: #35415c;
+
+  --text: #e8edf5;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+
+  --brand: #10b981;
+  --brand-hover: #34d399;
+  --brand-soft: #062e24;
+  --brand-text: #6ee7b7;
+
+  --expense: #fb7185;
+  --expense-soft: #3b1220;
+  --income: #34d399;
+  --income-soft: #06291f;
+  --warning: #fbbf24;
+  --warning-soft: #3a2a08;
+  --danger: #f87171;
+  --danger-soft: #3b1414;
+  --info: #60a5fa;
+  --info-soft: #10243f;
+
+  --ring: rgba(16, 185, 129, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+
+  color-scheme: dark;
+}
+
+/* Expose tokens to Tailwind utilities: bg-surface, text-muted, border-line … */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
+  --color-expense: var(--expense);
+  --color-expense-soft: var(--expense-soft);
+  --color-income: var(--income);
+  --color-income-soft: var(--income-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect the OS reduced-motion setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible keyboard focus everywhere, never a focus ring on mouse clicks. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ---------- Animations ---------- */
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0.9; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInBottom {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+.animate-slide-up       { animation: slideUp 0.25s ease-out; }
+.animate-fade-in        { animation: fadeIn 0.2s ease-out; }
+.animate-slide-in-bottom{ animation: slideInBottom 0.25s ease-out; }
+.animate-pulse-soft     { animation: pulseSoft 1.4s ease-in-out infinite; }
+
+/* ---------- Utilities ---------- */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+.mb-safe { margin-bottom: max(env(safe-area-inset-bottom), 0px); }
+.pt-safe { padding-top: max(env(safe-area-inset-top), 0px); }
+
+/* Screen-reader-only text that becomes visible on keyboard focus. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.focus\:not-sr-only:focus {
+  position: static;
+  width: auto; height: auto;
+  padding: inherit; margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Hide number spinners — amounts are typed, never stepped. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Tabular figures keep money columns aligned. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Skeleton placeholder used by loading states. */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 0.75rem;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
