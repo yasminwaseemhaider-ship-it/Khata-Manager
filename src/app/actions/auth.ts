@@ -97,6 +97,32 @@ function siteUrl(): string {
   return "http://localhost:3000";
 }
 
+/**
+ * Builds the confirmation link that goes in the email.
+ *
+ * Deliberately NOT `properties.action_link`. That points at Supabase's
+ * /auth/v1/verify, which then bounces to `redirect_to` — but only if that URL
+ * is on the project's Redirect URLs allow-list. When it is not, Supabase
+ * silently substitutes the Site URL and appends the session to the URL
+ * *fragment*, which a server route can never read. The result is a link that
+ * dumps the user on the homepage with a token in the address bar.
+ *
+ * `hashed_token` sidesteps all of it: the link points straight at this app, so
+ * no allow-list is consulted, everything arrives as a query parameter, and
+ * /auth/callback exchanges it for a cookie session with verifyOtp.
+ */
+function verificationLink(
+  hashedToken: string,
+  type: "signup" | "recovery",
+  next: string
+): string {
+  const url = new URL(`${siteUrl()}/auth/callback`);
+  url.searchParams.set("token_hash", hashedToken);
+  url.searchParams.set("type", type);
+  url.searchParams.set("next", next);
+  return url.toString();
+}
+
 export async function signup(formData: FormData) {
   const parsed = signupSchema.safeParse({
     name: formData.get("name"),
@@ -132,10 +158,7 @@ export async function signup(formData: FormData) {
     type: "signup",
     email: parsed.data.email,
     password: parsed.data.password,
-    options: {
-      data: { name: parsed.data.name },
-      redirectTo: `${siteUrl()}/auth/callback?next=/dashboard`,
-    },
+    options: { data: { name: parsed.data.name } },
   });
 
   if (linkError) {
@@ -155,15 +178,16 @@ export async function signup(formData: FormData) {
   }
 
   const uid = linkData.user?.id;
-  const actionLink = linkData.properties?.action_link;
+  const hashedToken = linkData.properties?.hashed_token;
 
-  if (!uid || !actionLink) {
-    console.error("[signup] generateLink returned no user or link");
+  if (!uid || !hashedToken) {
+    console.error("[signup] generateLink returned no user or token");
     return { error: "Could not create the account. Please try again." };
   }
 
+  const link = verificationLink(hashedToken, "signup", "/dashboard");
   const sent = await sendMail(
-    confirmSignupEmail(parsed.data.email, actionLink, parsed.data.name)
+    confirmSignupEmail(parsed.data.email, link, parsed.data.name)
   );
 
   if (!sent.ok) {
@@ -234,15 +258,15 @@ export async function sendPasswordReset(formData: FormData) {
     const { data, error } = await service.auth.admin.generateLink({
       type: "recovery",
       email,
-      options: { redirectTo: `${siteUrl()}/auth/callback?next=/reset-password` },
     });
 
-    const actionLink = data?.properties?.action_link;
+    const hashedToken = data?.properties?.hashed_token;
     if (error) {
       // Usually "user not found" — logged, never reported back.
       console.error("[reset]", error.message);
-    } else if (actionLink) {
-      const sent = await sendMail(resetPasswordEmail(email, actionLink));
+    } else if (hashedToken) {
+      const link = verificationLink(hashedToken, "recovery", "/reset-password");
+      const sent = await sendMail(resetPasswordEmail(email, link));
       if (!sent.ok) console.error("[reset] send failed:", sent.error);
     }
   } else {
