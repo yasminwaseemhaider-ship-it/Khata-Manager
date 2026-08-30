@@ -236,6 +236,12 @@ alter table public.transactions drop constraint if exists transfer_distinct_acco
 alter table public.transactions add constraint transfer_distinct_accounts
   check (type <> 'transfer' or account_id is distinct from transfer_to_account_id) not valid;
 
+-- Every new transaction needs a title (note) so it can be named in the lists.
+-- Existing rows are grandfathered: NOT VALID guards only rows written from now on.
+alter table public.transactions drop constraint if exists tx_note_required;
+alter table public.transactions add constraint tx_note_required
+  check (note is not null and btrim(note) <> '') not valid;
+
 create index if not exists idx_transactions_user_date on public.transactions (user_id, transaction_date desc);
 create index if not exists idx_transactions_user_type_date on public.transactions (user_id, type, transaction_date desc);
 create index if not exists idx_transactions_user_category on public.transactions (user_id, category_id);
@@ -573,6 +579,54 @@ create policy "owner_select_users" on public.users
 revoke insert, update, delete on public.users from authenticated;
 
 -- ============================================================================
+-- ACCOUNT LIFETIME — deleting the auth user removes EVERY record they own.
+--
+-- The FK chains above already cascade from auth.users, so a plain
+-- `delete from auth.users` tears down the whole account. This trigger is an
+-- explicit safety net: it wipes each table by user_id, so not a single row can
+-- survive even if a future table is created without a cascade FK (or one is
+-- ever dropped). It runs SECURITY DEFINER as the relation owner, which RLS
+-- does not apply to, so it can clean the tables even though this schema does
+-- not FORCE row level security.
+-- ============================================================================
+create or replace function public.purge_user_data()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := old.id;
+begin
+  -- Children first, so explicit deletes never trip an FK.
+  delete from public.transaction_tags where user_id = uid;
+  delete from public.khata_payments  where user_id = uid;
+  delete from public.khata_entries   where user_id = uid;
+  delete from public.khata_people    where user_id = uid;
+  delete from public.receipts        where user_id = uid;
+  delete from public.shopping_items  where user_id = uid;
+  delete from public.shopping_lists  where user_id = uid;
+  delete from public.notifications   where user_id = uid;
+  delete from public.reminders       where user_id = uid;
+  delete from public.recurring_rules where user_id = uid;
+  delete from public.budgets         where user_id = uid;
+  delete from public.common_choices  where user_id = uid;
+  delete from public.transactions    where user_id = uid;
+  delete from public.subcategories   where user_id = uid;
+  delete from public.categories      where user_id = uid;
+  delete from public.account_balances where user_id = uid;
+  delete from public.accounts        where user_id = uid;
+  delete from public.payment_methods where user_id = uid;
+  delete from public.vendors         where user_id = uid;
+  delete from public.tags            where user_id = uid;
+  delete from public.dashboard_prefs where user_id = uid;
+  delete from public.user_settings   where user_id = uid;
+  delete from public.users           where id = uid;
+  return old;
+end $$;
+
+drop trigger if exists trg_purge_user_data on auth.users;
+create trigger trg_purge_user_data
+after delete on auth.users
+for each row execute function public.purge_user_data();
+
+-- ============================================================================
 -- STORAGE
 --
 -- Receipt files are stored in Cloudinary (private, `type: authenticated`), not
@@ -753,8 +807,8 @@ begin
         (user_id, type, amount, category_id, account_id, payment_method_id,
          vendor_id, note, transaction_date, is_recurring, is_recurring_rule_id)
       values
-        (r.user_id, r.type, r.amount, r.category_id, r.account_id, r.payment_method_id,
-         r.vendor_id, coalesce(r.note, r.title), r.next_run::timestamptz, true, r.id);
+(r.user_id, r.type, r.amount, r.category_id, r.account_id, r.payment_method_id,
+          r.vendor_id, coalesce(nullif(r.note, ''), nullif(r.title, ''), 'Transaction'), r.next_run::timestamptz, true, r.id);
       n := n + 1;
 
       v_next := case r.frequency

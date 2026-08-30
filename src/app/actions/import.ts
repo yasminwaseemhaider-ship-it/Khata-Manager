@@ -307,7 +307,11 @@ export async function importTransactions(
         }
       }
 
-      const note = String(row.description ?? "").trim() || null;
+      // Every transaction needs a title: use the description when the row has
+      // one, otherwise fall back to the category / a transfer label.
+      const note =
+        String(row.description ?? "").trim() ||
+        (type === "transfer" ? "Transfer" : String(row.category ?? "").trim());
 
       if (options.skipDuplicates) {
         const key = `${date.toISOString().slice(0, 10)}|${amount}|${norm(note)}`;

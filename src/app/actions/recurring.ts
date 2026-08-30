@@ -146,7 +146,7 @@ export async function postRecurringNow(id: string): Promise<ActionResult<{ id: s
         account_id: rule.account_id,
         payment_method_id: rule.payment_method_id,
         vendor_id: rule.vendor_id,
-        note: rule.note ?? rule.title,
+        note: rule.note ?? rule.title ?? "Transaction",
         transaction_date: new Date().toISOString(),
         is_recurring: true,
         is_recurring_rule_id: rule.id,

@@ -122,6 +122,9 @@ export async function eraseAllData(confirmation: string): Promise<ActionResult> 
       "payment_methods",
       "vendors",
       "tags",
+      // Preferences are data the user owns too — wipe them for a clean slate.
+      "user_settings",
+      "dashboard_prefs",
     ] as const;
 
     for (const t of tables) {

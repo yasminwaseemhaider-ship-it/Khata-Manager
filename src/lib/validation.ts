@@ -8,6 +8,7 @@ const uuid = z.string().uuid();
 /** Optional FK: "" from a <select> means "not set". */
 export const optionalId = z
   .union([uuid, z.literal(""), z.null(), z.undefined()])
+  .optional()
   .transform((v) => (v ? v : null))
   .nullable();
 
@@ -25,6 +26,7 @@ export const nonNegativeMoney = money.refine((v) => v >= 0, {
 
 const optionalNumber = z
   .union([z.number(), z.string(), z.null(), z.undefined()])
+  .optional()
   .transform((v) => {
     if (v === "" || v === null || v === undefined) return null;
     const n = typeof v === "string" ? Number(v.replace(/,/g, "")) : v;
@@ -34,6 +36,7 @@ const optionalNumber = z
 
 const optionalText = z
   .union([z.string(), z.null(), z.undefined()])
+  .optional()
   .transform((v) => {
     const t = (v ?? "").trim();
     return t.length ? t : null;
@@ -49,6 +52,7 @@ const isoDateTime = z
 
 const optionalDate = z
   .union([z.string(), z.null(), z.undefined()])
+  .optional()
   .transform((v) => (v ? v : null))
   .nullable();
 
@@ -66,7 +70,12 @@ export const transactionSchema = z
     payment_method_id: optionalId,
     vendor_id: optionalId,
     vendor_name: optionalText, // free-typed vendor, created on the fly
-    note: optionalText,
+    // The title (note) names the transaction. Required so every expense,
+    // income and transfer shows what it was for in the lists.
+    note: z
+      .union([z.string(), z.null(), z.undefined()])
+      .transform((v) => (v ?? "").trim())
+      .refine((v) => v.length > 0, { message: "Add a title — what was this for?" }),
     qty: optionalNumber,
     unit_price: optionalNumber,
     transaction_date: isoDateTime.optional(),

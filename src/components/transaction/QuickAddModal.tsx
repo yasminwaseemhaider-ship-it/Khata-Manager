@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea, Badge } from "@/components/ui/form";
+import { Field, Input, Select, Badge } from "@/components/ui/form";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { useToast } from "@/context/ToastContext";
 import { useAppData } from "@/context/AppDataContext";
@@ -97,7 +97,6 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Optional fields
-  const [note, setNote] = useState(preset?.note ?? "");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [accountId, setAccountId] = useState(
     preset?.account_id ?? settings.default_account_id ?? ""
@@ -112,8 +111,9 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [receipt, setReceipt] = useState<File | null>(null);
 
-  // Smart entry
-  const [smartText, setSmartText] = useState("");
+  // Smart entry — a Title field that also understands phrases like
+  // "groceries 3500 cash at Imtiaz" and fills the amount/category for you.
+  const [title, setTitle] = useState(preset?.note ?? "");
   const [draft, setDraft] = useState<ParsedTransaction | null>(null);
   const [listening, setListening] = useState(false);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
@@ -151,6 +151,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
 
   const numericAmount = Number(amount.replace(/,/g, ""));
   const canSave =
+    title.trim().length > 0 &&
     numericAmount > 0 &&
     (type === "transfer" ? !!accountId && !!toAccountId && accountId !== toAccountId : !!categoryId);
 
@@ -192,9 +193,8 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
     if (draft.vendorId) setVendorId(draft.vendorId);
     else if (draft.vendorName) setVendorName(draft.vendorName);
     if (draft.date) setWhen(toLocalInput(new Date(draft.date)));
-    if (draft.note) setNote(draft.note);
+    if (draft.note) setTitle(draft.note);
     setDraft(null);
-    setSmartText("");
     toast("Details filled in — check and save.", { type: "info" });
   }
 
@@ -215,7 +215,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
     rec.interimResults = false;
     rec.onresult = (e) => {
       const text = e.results[0]?.[0]?.transcript ?? "";
-      setSmartText(text);
+      setTitle(text);
       runParse(text);
     };
     rec.onerror = () => {
@@ -280,7 +280,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
       );
       if (hit) setVendorId(hit.id);
       else setVendorName(scanDraft.vendor);
-      if (!note) setNote(scanDraft.vendor);
+      if (!title) setTitle(scanDraft.vendor);
     }
     if (scanDraft.date) {
       const d = new Date(`${scanDraft.date}T12:00:00`);
@@ -326,7 +326,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
       payment_method_id: methodId || null,
       vendor_id: vendorId || null,
       vendor_name: vendorId ? null : vendorName || null,
-      note: note || null,
+      note: title.trim(),
       qty: qty || null,
       unit_price: unitPrice || null,
       transaction_date: new Date(when).toISOString(),
@@ -371,7 +371,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
     if (addAnother) {
       // Keep type/category/account so logging several items in a row is fast.
       setAmount("");
-      setNote("");
+      setTitle("");
       setQty("");
       setUnitPrice("");
       setReceipt(null);
@@ -393,7 +393,7 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
       open
       onClose={onClose}
       title="Add transaction"
-      description="Amount and category are all you need."
+      description="A short title plus the amount is all you need."
       size="lg"
       footer={
         <div className="flex gap-2">
@@ -442,15 +442,20 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
         ))}
       </div>
 
-      {/* ---------- Smart entry ---------- */}
+      {/* ---------- Title / smart entry ---------- */}
       <div className="mb-4">
+        <label htmlFor="qa-title" className="mb-1.5 block text-xs font-medium text-muted">
+          Title <span className="text-danger">*</span>
+        </label>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <Input
-              value={smartText}
+              id="qa-title"
+              value={title}
+              required
               onChange={(e) => {
-                setSmartText(e.target.value);
+                setTitle(e.target.value);
                 runParse(e.target.value);
               }}
               onKeyDown={(e) => {
@@ -459,9 +464,10 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
                   acceptDraft();
                 }
               }}
-              placeholder='Try "groceries 3500 cash at Imtiaz"'
+              placeholder="e.g. Groceries at Imtiaz"
+              maxLength={120}
               className="pl-9"
-              aria-label="Smart entry — describe the expense in your own words"
+              aria-label="Title (required) — what was this for?"
             />
           </div>
           <Button
@@ -504,6 +510,11 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
             </>
           )}
         </div>
+
+        <p className="mt-1.5 text-[11px] text-faint">
+          Shown in your list as the title. Type an amount, e.g.{" "}
+          <span className="text-muted">3500 at Imtiaz</span>, to auto-fill the rest.
+        </p>
 
         {/* Scanned receipt — a suggestion the user must accept. */}
         {scanDraft && (
@@ -766,16 +777,6 @@ function QuickAddForm({ onClose, preset }: Omit<QuickAddModalProps, "open">) {
               type="datetime-local"
               value={when}
               onChange={(e) => setWhen(e.target.value)}
-            />
-          </Field>
-
-          <Field label="Description" htmlFor="qa-note" className="sm:col-span-2">
-            <Textarea
-              id="qa-note"
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="What was it for?"
             />
           </Field>
 

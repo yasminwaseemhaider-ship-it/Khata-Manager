@@ -11,6 +11,7 @@ import { useAppData } from "@/context/AppDataContext";
 import { updateTransaction } from "@/app/actions/transactions";
 import { getReceiptUrls, uploadReceipt, deleteReceipt } from "@/app/actions/receipts";
 import { toLocalInput } from "@/lib/date";
+import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TransactionWithTags, TxType } from "@/types";
 
@@ -100,6 +101,12 @@ function EditForm({
     setSaving(true);
     setError(null);
 
+    if (!note.trim()) {
+      setError("Add a title — what was this for?");
+      setSaving(false);
+      return;
+    }
+
     const res = await updateTransaction(tx.id, {
       type,
       amount: amount,
@@ -110,7 +117,7 @@ function EditForm({
       payment_method_id: methodId || null,
       vendor_id: vendorId || null,
       vendor_name: vendorId ? null : vendorName || null,
-      note: note || null,
+      note: note.trim(),
       qty: qty || null,
       unit_price: unitPrice || null,
       transaction_date: new Date(when).toISOString(),
@@ -162,6 +169,7 @@ function EditForm({
       open
       onClose={onClose}
       title="Edit transaction"
+      description={`${tx.note ?? ""} · ${formatMoney(tx.amount, symbol)}`}
       size="lg"
       footer={
         <div className="flex gap-2">
@@ -323,12 +331,13 @@ function EditForm({
           />
         </Field>
 
-        <Field label="Description" htmlFor="ed-note" className="sm:col-span-2">
+        <Field label="Title" htmlFor="ed-note" className="sm:col-span-2">
           <Textarea
             id="ed-note"
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Groceries at Imtiaz"
           />
         </Field>
 

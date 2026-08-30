@@ -268,7 +268,7 @@ export async function duplicateTransaction(
         transfer_to_account_id: src.transfer_to_account_id,
         payment_method_id: src.payment_method_id,
         vendor_id: src.vendor_id,
-        note: src.note,
+        note: src.note || "Transaction",
         qty: src.qty,
         unit_price: src.unit_price,
         transaction_date:
