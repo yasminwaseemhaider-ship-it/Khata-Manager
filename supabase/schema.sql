@@ -97,6 +97,9 @@ create table if not exists public.user_settings (
   default_account_id uuid,
   notify_bills       boolean not null default true,
   notify_budgets     boolean not null default true,
+  -- Stamped when the once-a-day maintenance pass (recurring posting + notification
+  -- generation) last ran, so it does not repeat on every page view.
+  last_maintenance_at timestamptz,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
@@ -105,6 +108,7 @@ alter table public.user_settings add column if not exists week_starts_on int not
 alter table public.user_settings add column if not exists default_account_id uuid;
 alter table public.user_settings add column if not exists notify_bills boolean not null default true;
 alter table public.user_settings add column if not exists notify_budgets boolean not null default true;
+alter table public.user_settings add column if not exists last_maintenance_at timestamptz;
 
 comment on table public.user_settings is 'Per-user preferences (currency, theme, defaults).';
 

@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = (userId: string): UserSettings => ({
   default_account_id: null,
   notify_bills: true,
   notify_budgets: true,
+  last_maintenance_at: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 });

@@ -25,6 +25,8 @@ export interface UserSettings {
   default_account_id?: UUID | null;
   notify_bills: boolean;
   notify_budgets: boolean;
+  /** When the once-a-day maintenance pass last ran. Null means it never has. */
+  last_maintenance_at?: string | null;
   created_at: string;
   updated_at: string;
 }

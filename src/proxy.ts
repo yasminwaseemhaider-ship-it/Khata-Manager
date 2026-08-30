@@ -24,6 +24,23 @@ const PROTECTED_PREFIXES = [
 ];
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Decide whether this request needs an identity BEFORE asking for one.
+  // `auth.getUser()` is a network round trip to Supabase — it verifies the JWT
+  // rather than decoding a cookie locally. It used to run unconditionally at
+  // the top of this function, so every exempt path paid for an answer it then
+  // threw away.
+  if (ALWAYS_ALLOWED.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next({ request });
+  }
+
+  const isAuthPath = AUTH_PATHS.some((p) => pathname.startsWith(p));
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+  if (!isAuthPath && !isProtected) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -45,26 +62,22 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refreshes the auth cookie as a side effect, keeping sessions alive.
+  // Refreshes the auth cookie as a side effect, keeping sessions alive. Every
+  // real page of the app is covered by the two lists above, so sessions still
+  // refresh on ordinary use.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
-  if (ALWAYS_ALLOWED.some((p) => pathname.startsWith(p))) {
-    return response;
-  }
-
   // A signed-in user has no reason to see the login or signup pages.
-  if (user && AUTH_PATHS.some((p) => pathname.startsWith(p))) {
+  if (user && isAuthPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
   }
 
-  if (!user && PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
+  if (!user && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -76,12 +89,20 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-// Next 16 renamed this convention from `middleware` to `proxy`; the alias keeps
-// both names working.
-export const middleware = proxy;
-
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    {
+      source:
+        "/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+      // Skip link prefetches. The sidebar renders ~19 links, so hover and
+      // viewport prefetching turned one navigation into a fan-out of auth round
+      // trips. Real navigations are still checked here, and every protected page
+      // re-verifies server-side regardless, so a prefetch can never leak a
+      // payload to a signed-out visitor.
+      missing: [
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "purpose", value: "prefetch" },
+      ],
+    },
   ],
 };
