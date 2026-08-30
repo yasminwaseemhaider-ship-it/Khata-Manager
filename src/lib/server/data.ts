@@ -47,68 +47,61 @@ const DEFAULT_SETTINGS = (userId: string): UserSettings => ({
   updated_at: new Date().toISOString(),
 });
 
-/** Categories, accounts, tags, settings and balances in a single round trip. */
+/** Shape returned by the `get_taxonomy` RPC (see supabase/schema.sql section 24). */
+interface RawTaxonomy {
+  categories: Category[];
+  subcategories: Subcategory[];
+  accounts: Account[];
+  paymentMethods: PaymentMethod[];
+  vendors: Vendor[];
+  tags: Tag[];
+  settings: UserSettings | null;
+  balances: { account_id: string; balance: number }[];
+  frequentCategoryIds: (string | null)[];
+}
+
+/**
+ * Categories, accounts, tags, settings and balances in a single round trip.
+ *
+ * This genuinely is one round trip now. It used to be nine parallel PostgREST
+ * calls, which is nine chances to pay the network latency on a link where one
+ * round trip costs ~300ms — for data that changes maybe once a week. The RPC is
+ * SECURITY INVOKER, so RLS still scopes every row to the calling user.
+ */
 export const getTaxonomy = cache(async function getTaxonomy(): Promise<Taxonomy> {
   const { supabase, userId } = await requireUser();
 
-  const [
-    { data: categories },
-    { data: subcategories },
-    { data: accounts },
-    { data: paymentMethods },
-    { data: vendors },
-    { data: tags },
-    { data: settings },
-    { data: balances },
-    { data: common },
-  ] = await Promise.all([
-    supabase
-      .from("categories")
-      .select()
-      .eq("user_id", userId)
-      .order("sort_order")
-      .order("name"),
-    supabase.from("subcategories").select().eq("user_id", userId).order("name"),
-    supabase
-      .from("accounts")
-      .select()
-      .eq("user_id", userId)
-      .order("is_default", { ascending: false })
-      .order("created_at"),
-    supabase.from("payment_methods").select().eq("user_id", userId).order("created_at"),
-    supabase.from("vendors").select().eq("user_id", userId).order("name"),
-    supabase.from("tags").select().eq("user_id", userId).order("name"),
-    supabase.from("user_settings").select().eq("user_id", userId).maybeSingle(),
-    supabase.from("account_balances").select("account_id, balance").eq("user_id", userId),
-    supabase
-      .from("common_choices")
-      .select("category_id, usage_count")
-      .eq("user_id", userId)
-      .order("usage_count", { ascending: false })
-      .limit(8),
-  ]);
+  const { data, error } = await supabase.rpc("get_taxonomy");
+  if (error) {
+    // Falling through with empty data would bounce the user to /onboarding as
+    // though they had no categories, so make the real cause visible instead.
+    console.error("[taxonomy] rpc failed:", error.message);
+  }
+
+  const raw = (data ?? {}) as Partial<RawTaxonomy>;
+  const accounts = raw.accounts ?? [];
 
   const balanceMap: Record<string, number> = {};
-  for (const b of (balances ?? []) as { account_id: string; balance: number }[]) {
+  for (const b of raw.balances ?? []) {
     balanceMap[b.account_id] = Number(b.balance);
   }
   // Accounts with no transactions yet have no balance row; fall back to opening.
-  for (const a of (accounts ?? []) as Account[]) {
+  for (const a of accounts) {
     if (balanceMap[a.id] === undefined) balanceMap[a.id] = Number(a.opening_balance);
   }
 
   return {
-    categories: (categories ?? []) as Category[],
-    subcategories: (subcategories ?? []) as Subcategory[],
-    accounts: (accounts ?? []) as Account[],
-    paymentMethods: (paymentMethods ?? []) as PaymentMethod[],
-    vendors: (vendors ?? []) as Vendor[],
-    tags: (tags ?? []) as Tag[],
-    settings: ((settings as UserSettings | null) ?? DEFAULT_SETTINGS(userId)),
+    categories: raw.categories ?? [],
+    subcategories: raw.subcategories ?? [],
+    accounts,
+    paymentMethods: raw.paymentMethods ?? [],
+    vendors: raw.vendors ?? [],
+    tags: raw.tags ?? [],
+    settings: raw.settings ?? DEFAULT_SETTINGS(userId),
     balances: balanceMap,
-    frequentCategoryIds: ((common ?? []) as { category_id: string | null }[])
-      .map((c) => c.category_id)
-      .filter((id): id is string => !!id),
+    frequentCategoryIds: (raw.frequentCategoryIds ?? []).filter(
+      (id): id is string => !!id
+    ),
   };
 });
 

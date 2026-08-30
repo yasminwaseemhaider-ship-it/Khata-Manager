@@ -847,3 +847,62 @@ begin
 end $$;
 
 grant execute on function public.post_due_recurring() to authenticated;
+
+-- ============================================================================
+-- 24) TAXONOMY IN ONE ROUND TRIP
+--
+-- The app shell needs categories, subcategories, accounts, payment methods,
+-- vendors, tags, settings, balances and frequent picks on every page. Fetching
+-- them as nine separate PostgREST calls meant nine network round trips for data
+-- that barely changes — and on a connection where one round trip costs ~300ms,
+-- that was the single largest remaining cost of rendering any page.
+--
+-- SECURITY INVOKER so row level security still applies: this runs as the
+-- calling user, not as the definer. The explicit user_id predicates are
+-- therefore belt-and-braces alongside RLS, and they let the per-user indexes do
+-- the work.
+-- ============================================================================
+create or replace function public.get_taxonomy()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'categories', coalesce((
+      select jsonb_agg(to_jsonb(c) order by c.sort_order, c.name)
+      from public.categories c where c.user_id = (select auth.uid())), '[]'::jsonb),
+    'subcategories', coalesce((
+      select jsonb_agg(to_jsonb(s) order by s.name)
+      from public.subcategories s where s.user_id = (select auth.uid())), '[]'::jsonb),
+    'accounts', coalesce((
+      select jsonb_agg(to_jsonb(a) order by a.is_default desc, a.created_at)
+      from public.accounts a where a.user_id = (select auth.uid())), '[]'::jsonb),
+    'paymentMethods', coalesce((
+      select jsonb_agg(to_jsonb(p) order by p.created_at)
+      from public.payment_methods p where p.user_id = (select auth.uid())), '[]'::jsonb),
+    'vendors', coalesce((
+      select jsonb_agg(to_jsonb(v) order by v.name)
+      from public.vendors v where v.user_id = (select auth.uid())), '[]'::jsonb),
+    'tags', coalesce((
+      select jsonb_agg(to_jsonb(t) order by t.name)
+      from public.tags t where t.user_id = (select auth.uid())), '[]'::jsonb),
+    'settings', (
+      select to_jsonb(us) from public.user_settings us
+      where us.user_id = (select auth.uid())),
+    'balances', coalesce((
+      select jsonb_agg(jsonb_build_object('account_id', b.account_id, 'balance', b.balance))
+      from public.account_balances b where b.user_id = (select auth.uid())), '[]'::jsonb),
+    'frequentCategoryIds', coalesce((
+      select jsonb_agg(x.category_id)
+      from (
+        select cc.category_id from public.common_choices cc
+        where cc.user_id = (select auth.uid()) and cc.category_id is not null
+        order by cc.usage_count desc
+        limit 8
+      ) x), '[]'::jsonb)
+  );
+$$;
+
+grant execute on function public.get_taxonomy() to authenticated;
