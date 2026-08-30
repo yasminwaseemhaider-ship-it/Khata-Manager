@@ -249,6 +249,18 @@ create index if not exists idx_transactions_user_account on public.transactions 
 create index if not exists idx_transactions_user_vendor on public.transactions (user_id, vendor_id);
 create index if not exists idx_transactions_rule on public.transactions (is_recurring_rule_id);
 
+-- The balance trigger (recalc_account_balance) sums transactions by account with
+-- NO user_id filter, so idx_transactions_user_account cannot serve it — user_id
+-- is that index's leading column. These two match the trigger's predicates
+-- exactly; INCLUDE (amount) lets the four sums run as index-only scans instead
+-- of scanning the table twice per written row.
+create index if not exists idx_transactions_account_type
+  on public.transactions (account_id, type) include (amount);
+-- Only transfers set this column, so the partial index stays small.
+create index if not exists idx_transactions_transfer_to_type
+  on public.transactions (transfer_to_account_id, type) include (amount)
+  where transfer_to_account_id is not null;
+
 -- ============================================================================
 -- 9) COMMON CHOICES (remembers frequent picks to power quick-add)
 -- ============================================================================
@@ -403,6 +415,8 @@ create table if not exists public.khata_payments (
   created_at     timestamptz not null default now()
 );
 create index if not exists idx_khata_payments_entry on public.khata_payments (khata_entry_id);
+-- Its RLS predicate and getKhata() both filter on user_id.
+create index if not exists idx_khata_payments_user on public.khata_payments (user_id);
 
 -- ============================================================================
 -- 14) RECEIPTS
